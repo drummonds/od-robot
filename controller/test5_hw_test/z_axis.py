@@ -42,7 +42,7 @@ class ZAxis:
         elif state == 2:
             return 'Top'
         else:
-            return 'Error Top {} Bottom {}'.format(self.top, self.bottom)
+            return 'OD at top or Error'.format(self.top, self.bottom)
 
     def activate(self, start_dc=0.15):
         # May not be switched on
@@ -63,19 +63,19 @@ class ZAxis:
         self.is_active = False
 
     def nudge(self, at_position, run_time=20, override=False):
+        """run_time set in 100ms"""
+        time_out = run_time * 10
         # Nudge the servo for testing.  Run for 1 second at at_position
-        for i in range(run_time):
+        for i in range(time_out):
             if not override:  # Check end stops
-                if self.state() == 3:  # Error
-                    break
-                elif at_position > self.neutral:  # moving down
-                    if self.state() == 1:
+                if at_position > self.neutral:  # moving down
+                    if self.bottom:
                         break
                 else:  # moving up
-                    if self.state() == 2:
+                    if self.top:
                         break
             if i == 0:
                 self.set_position(at_position)  # Only start moving if ok
-            time.sleep_ms(100)
+            time.sleep_ms(10)
         self.shutdown()
         print("Shutdown Z Axis nudge")
