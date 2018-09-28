@@ -10,15 +10,21 @@ class Rotator:
     def __init__(self, robot):
         self.old_pos = -1
         self.robot = robot
-        self.in_home = 86
-        self.dvd_home = 50.5
-        self.out_home = 14
-        self.waste_home = 0
+        # When rotating to a bin sometimes use an offset for pickup and drop off
+        # Some bins may need longer to pickup from
+        self.bins = {
+            # Name: position, drop offset, pickup offset, drop descend_time, pickup descent time
+            #       0         1            2              3                  4
+            'in': [ 86,       0,           0,             20,                150],
+            'out': [14,       0,           0,             20,                150],
+            'od': [50.5,      0,           0,             40,                55],
+            'waste': [0,      0,           0,             20,                0],  # no pickup
+        }
 
     def rotate(self, new_position, verbose = False):
-        self.rotate_head_anti_hystersis(new_position, verbose = verbose)
+        self.rotate_head_anti_hysteresis(new_position, verbose = verbose)
 
-    def rotate_head_anti_hystersis(self, new_position, verbose = False):
+    def rotate_head_anti_hysteresis(self, new_position, verbose = False):
         if new_position != self.old_pos:
             pre_move = max(0, new_position - 5)
             self.robot(f'control1.rotate.wait_set_position({pre_move})', verbose = False)
@@ -27,18 +33,22 @@ class Rotator:
                 f'control1.rotate.wait_set_position({new_position})', verbose = verbose)
             self.old_pos = new_position  # Store the old position
 
-    def in_bin(self, offset = 0, verbose = False):
-        self.rotate_head_anti_hystersis(self.in_home + offset, verbose = verbose)
+    def drop_descend_time(self, bin_name):
+        this_bin = self.bins[bin_name]
+        return this_bin[3]
 
-    def dvd(self, offset = 0, verbose = False):
-        self.rotate_head_anti_hystersis(self.dvd_home + offset, verbose = verbose)
+    def pickup_descend_time(self, bin_name):
+        """This is more a safety maximum as the switch should trigger"""
+        this_bin = self.bins[bin_name]
+        return this_bin[4]
 
-    def out_bin(self, offset = 0, verbose = False):
-        self.rotate_head_anti_hystersis(self.out_home + offset, verbose = verbose)
-
-    def waste_bin(self, offset = 0, verbose = False):
-        self.rotate_head_anti_hystersis(self.waste_home + offset, verbose = verbose)
-
+    def to_bin(self, bin_name, verbose=False, drop_off=False):
+        this_bin = self.bins[bin_name]
+        if drop_off:
+            offset = this_bin[1]
+        else:
+            offset = this_bin[2]
+        self.rotate_head_anti_hysteresis(this_bin[0] + offset, verbose=verbose)
 
 
 class ODRobot:
@@ -146,7 +156,6 @@ class ODRobot:
         time.sleep(2)  # TODO Poll status
         self.robot('control1.th.shutdown()', verbose=verbose)  # Make toolhead safe
 
-
     def raise_toolhead(self, verbose=False):
         """Raise the toolhead and wait for it to be finished"""
         self.zero_toolhead(verbose=verbose)
@@ -172,82 +181,42 @@ class ODRobot:
         time.sleep(2)  # Let the eg park happen before shutdown
         self.robot('control1.th.shutdown()')
 
-    def pickup_from_dvd_drive(self):
-        self.disk_open()
-        self.rotator.dvd(offset = 0.5)
-        self.release()
-        self.robot(f'control1.z_axis.nudge({self.z_axis_down_setting}, run_time=120)')  # Move to surface
-        if not self.z_at_bottom():
-            self.make_safe()
-            raise ODRobotError('Failed to grip Optical Disc on pickup from DVD')
-        self.grip()
-        time.sleep(1)  # Let it be securely gripped?
-        self.raise_toolhead()
-
-    def drop_on_dvd_drive(self):
-        self.disk_open()
-        self.rotator.dvd(offset = -0.2)
-        self.robot(f'control1.z_axis.nudge({self.z_axis_down_setting}, run_time=40)')  # Move nearer dvd
-        self.release()
-        time.sleep(1)  # Let release take effect
-        self.make_safe()
-
-    def pickup_from_in_bin(self):
-        self.rotator.in_bin()
-        self.release()
-        self.robot(f'control1.z_axis.nudge({self.z_axis_down_setting}, run_time=150)')  # Deeper than DVD so move further
-        self.grip()
-        self.raise_toolhead()
-
-    def drop_on_in_bin(self):
-        self.rotator.in_bin()
-        self.robot(f'control1.z_axis.nudge({self.z_axis_down_setting}, run_time=10)')  # Move nearer dvd
-        self.release()
-        time.sleep(1)  # Let release take effect
-        self.make_safe()
-
-    def pickup_from_out_bin(self):
-        self.rotator.out_bin()
-        self.release()
-        self.robot(f'control1.z_axis.nudge({self.z_axis_down_setting}, run_time=150)')  # Deeper than DVD so move further
-        self.grip()
-        self.raise_toolhead()
-
-    def drop_on_out_bin(self):
-        self.rotator.out_bin()
-        self.robot(f'control1.z_axis.nudge({self.z_axis_down_setting}, run_time=20)')  # Move nearer bin
+    def drop_on_bin(self, destination_bin, verbose=False):
+        self.rotator.to_bin(destination_bin, verbose=verbose, drop_off=True)
+        time_out = self.rotator.drop_descend_time(destination_bin)
+        self.robot(f'control1.z_axis.nudge({self.z_axis_down_setting},' +
+                   f'run_time={time_out})')  # Move nearer bin
         time.sleep(2)  # TODO poll
         self.release()
         self.park()
         self.shutdown()
 
-    def drop_on_bin(self, destination_bin):
-        destination_bin()
-        self.robot(f'control1.z_axis.nudge({self.z_axis_down_setting}, run_time=20)')  # Move nearer bin
-        time.sleep(2)  # TODO poll
+    def pickup_from_bin(self, destination_bin, verbose=False):
+        """Note this leaves the toolhead in the grip position which is not stable for a long time"""
+        self.rotator.to_bin(destination_bin, verbose=verbose)
         self.release()
-        self.park()
-        self.shutdown()
+        time_out = self.rotator.pickup_descend_time(destination_bin)
+        self.robot(f'control1.z_axis.nudge({self.z_axis_down_setting},' +
+                   f'run_time={time_out})')  # Move nearer bin
+        self.grip()
+        self.raise_toolhead()
+
 
     def rotate(self, new_position):
         self.rotator.rotate(new_position)
 
-    def load(self, verbose=False):
+    def load(self, verbose=False, source_bin = 'in', destination_bin = 'od'):
         self.make_safe(verbose=verbose)
-        self.pickup_from_in_bin()
-        self.drop_on_dvd_drive()
+        self.pickup_from_bin(source_bin, verbose=verbose)
+        self.drop_on_bin(destination_bin, verbose=verbose)
         self.make_safe(verbose=verbose)
         self.disk_close()
 
-    def unload(self, verbose=False, destination_bin = None):
-        if destination_bin is None:
-            destination_bin = self.rotator.out_bin
+    def unload(self, verbose=False, source_bin = 'od', destination_bin = 'out'):
         self.make_safe(verbose=verbose)
-        self.pickup_from_dvd_drive()
+        self.pickup_from_bin(source_bin, verbose=verbose)
         time.sleep(1)  # Otherwise seems to close very close to disk
-        self.disk_close()
-        self.drop_on_out_bin()
-        self.drop_on_bin(destination_bin)
+        self.drop_on_bin(destination_bin, verbose=verbose)
         self.make_safe(verbose=verbose)
         self.disk_close()
 
