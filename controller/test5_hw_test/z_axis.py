@@ -63,8 +63,8 @@ class ZAxis:
         self.is_active = False
 
     def nudge(self, at_position, run_time=20, override=False):
-        """run_time set in 100ms"""
-        time_out = run_time * 10
+        """run_time set in 100ms units"""
+        time_out = run_time * 100  # This is the maximum time
         # Nudge the servo for testing.  Run for 1 second at at_position
         for i in range(time_out):
             if not override:  # Check end stops
@@ -76,6 +76,6 @@ class ZAxis:
                         break
             if i == 0:
                 self.set_position(at_position)  # Only start moving if ok
-            time.sleep_ms(10)
+            time.sleep_ms(1)
         self.shutdown()
         print("Shutdown Z Axis nudge")

@@ -1,25 +1,20 @@
+import json
 import time
 import serial
 
+from h3timeit import h3_timeit
 
 class ODRobotError(Exception):
     pass
 
 
 class Rotator:
-    def __init__(self, robot):
+    def __init__(self, robot, calibration):
         self.old_pos = -1
         self.robot = robot
         # When rotating to a bin sometimes use an offset for pickup and drop off
         # Some bins may need longer to pickup from
-        self.bins = {
-            # Name: position, drop offset, pickup offset, drop descend_time, pickup descent time
-            #       0         1            2              3                  4
-            'in': [ 86,       0,           0,             20,                150],
-            'out': [14,       0,           0,             20,                150],
-            'od': [50.5,      0,           0,             40,                55],
-            'waste': [0,      0,           0,             20,                0],  # no pickup
-        }
+        self.bins = calibration['bins']
 
     def rotate(self, new_position, verbose = False):
         self.rotate_head_anti_hysteresis(new_position, verbose = verbose)
@@ -53,6 +48,12 @@ class Rotator:
 
 class ODRobot:
     def __init__(self, disk_open, disk_close, com_port="COM6"):
+        # Constants
+        try:
+            self.load_calibration()
+        except FileNotFoundError:
+            self.default_calibration()
+            self.save_calibration()
         # configure the serial connections (the parameters differs on the device you are connecting to)
         self.com_port = com_port
         self.disk_open = disk_open
@@ -64,13 +65,76 @@ class ODRobot:
         if not self.ser.isOpen():
             raise ODRobotError(f"Problem opening serial port on {com_port}")
         self.robot('import control1')  # Tends to do a soft reset at end of prog
-        self.rotator = Rotator(self.robot)
+        self.rotator = Rotator(self.robot, self.calibration)
         self.toolhead_z = -999  # Unknown state.  This is a best guess of its position
         # 0 is at top and then ca 1 = 0.1 seconds down
-        # Constants
-        self.z_axis_down_setting = 50
-        self.z_axis_up_setting = 44
 
+    # ****Calibration settings****
+
+    @property
+    def z_axis_down_setting(self):
+        return self.calibration['z_axis_down_setting']
+
+    @property
+    def z_axis_up_setting(self):
+        return self.calibration['z_axis_up_setting']
+
+    def default_calibration(self):
+        self.calibration = {}
+        self.calibration['z_axis_down_setting'] = 51
+        self.calibration['z_axis_up_setting'] = 44
+        self.calibration['bins'] = {
+            # Name: position, drop offset, pickup offset, drop descend_time, pickup descent time
+            #       0         1            2              3                  4
+            'in': [86, 0, 0, 20, 150],
+            'out': [14, 0, 0, 20, 150],
+            'od': [51.0, -0.2, 0.5, 40, 70],
+            'waste': [0, 0, 0, 20, 0],  # no pickup
+        }
+
+    def load_calibration(self):
+        with open('od_robot_calibration.json', 'r') as data_file:
+            json_data = data_file.read()
+        self.calibration = json.loads(json_data)
+
+    def save_calibration(self):
+        with open('od_robot_calibration.json', 'w') as outfile:
+            json.dump(self.calibration, outfile)
+
+    # ****Tool head timing and calibration settings****
+    @h3_timeit
+    def move_down(self, speed_setting=60, time_setting=3):
+        """Move down from top for a time period and measure time to complete (either timeout or
+         hit stop)"""
+        if not self.z_at_top():
+            raise ODRobotError('When started move_down toolhead not at top')
+        self.robot(f'control1.z_axis.nudge({speed_setting}, run_time={time_setting})', verbose=True)
+
+    # Move up definitely
+    @h3_timeit
+    def move_up(self, speed_setting=40, time_setting=12):
+        """ move back to the top for a time period"""
+        self.robot(f'control1.z_axis.nudge({speed_setting}, run_time={time_setting})', verbose=True)
+        if not self.z_at_top():
+            raise ODRobotError('When move_up toolhead not finis top')
+
+    def measure_up_down(self, speed_offset=None, offset_middle=50, time_down=10, time_up=None):
+        """offset is the amount from the centre that is used as the speed"""
+        if speed_offset is None:
+            speed_offset = 4
+        if time_up is None:
+            time_up = time_down * 3
+        down_speed = offset_middle + speed_offset
+        up_speed = offset_middle - speed_offset
+        md = self.move_down(speed_setting=down_speed, time_setting=time_down)
+        mu = self.move_up(speed_setting=up_speed, time_setting=time_up)
+        # Assume a symmetrical V shaped transfer curve then the center (no movement)
+        # Calculate better estimate of middle
+        alpha = mu[0] / md[0]  # Parameter for ratio of times
+        new_offset_middle = (down_speed + alpha * up_speed) / (1 + alpha)
+        return ((down_speed, md[0],), (up_speed, mu[0],), new_offset_middle,)
+
+    # ****Other code****
     def close(self):
         self.ser.close()
 
@@ -181,18 +245,23 @@ class ODRobot:
         time.sleep(2)  # Let the eg park happen before shutdown
         self.robot('control1.th.shutdown()')
 
+    def open_od_test(self, at_bin):
+        if at_bin == 'od':
+            self.disk_open()
+
     def drop_on_bin(self, destination_bin, verbose=False):
+        self.open_od_test(destination_bin)
         self.rotator.to_bin(destination_bin, verbose=verbose, drop_off=True)
         time_out = self.rotator.drop_descend_time(destination_bin)
         self.robot(f'control1.z_axis.nudge({self.z_axis_down_setting},' +
                    f'run_time={time_out})')  # Move nearer bin
         time.sleep(2)  # TODO poll
         self.release()
-        self.park()
-        self.shutdown()
+        self.make_safe()
 
     def pickup_from_bin(self, destination_bin, verbose=False):
         """Note this leaves the toolhead in the grip position which is not stable for a long time"""
+        self.open_od_test(destination_bin)
         self.rotator.to_bin(destination_bin, verbose=verbose)
         self.release()
         time_out = self.rotator.pickup_descend_time(destination_bin)
