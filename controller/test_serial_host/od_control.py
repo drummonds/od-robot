@@ -79,6 +79,10 @@ class ODRobot:
     def z_axis_up_setting(self):
         return self.calibration['z_axis_up_setting']
 
+    @property
+    def z_axis_middle_setting(self):
+        return (self.z_axis_down_setting + self.z_axis_up_setting) / 2
+
     def default_calibration(self):
         self.calibration = {}
         self.calibration['z_axis_down_setting'] = 51
@@ -91,6 +95,8 @@ class ODRobot:
             'od': [51.0, -0.2, 0.5, 40, 70],
             'waste': [0, 0, 0, 20, 0],  # no pickup
         }
+        self.calibration['toolhead_speed_up'] = 10  # mm/sec initial guess
+        self.calibration['toolhead_speed_down'] = 10  # mm/sec initial guess
 
     def load_calibration(self):
         with open('od_robot_calibration.json', 'r') as data_file:
@@ -118,10 +124,12 @@ class ODRobot:
         if not self.z_at_top():
             raise ODRobotError('When move_up toolhead not finis top')
 
-    def measure_up_down(self, speed_offset=None, offset_middle=50, time_down=10, time_up=None):
+    def measure_up_down(self, speed_offset=None, offset_middle=None, time_down=10, time_up=None):
         """offset is the amount from the centre that is used as the speed"""
+        if offset_middle is None:
+            offset_middle = self.z_axis_middle_setting
         if speed_offset is None:
-            speed_offset = 4
+            speed_offset = 5  # Changin default to 5 to give a wider range for center drift
         if time_up is None:
             time_up = time_down * 3
         down_speed = offset_middle + speed_offset
@@ -134,6 +142,48 @@ class ODRobot:
         new_offset_middle = (down_speed + alpha * up_speed) / (1 + alpha)
         return ((down_speed, md[0],), (up_speed, mu[0],), new_offset_middle,)
 
+    def move_toolhead_to(self, position, verbose = False):
+        """Move to:
+        position in mm"""
+        if self.toolhead_z < 1:
+            self.zero_toolhead(verbose)
+        if position < 1:
+            self.zero_toolhead(verbose)
+        elif position == self.toolhead_z:
+            pass  # No move necessary
+        else:
+            new_position = position - self.toolhead_z
+            self.move_toolhead(new_position, verbose)
+
+    def move_toolhead(self, amount, verbose = False):
+        """Move to:
+        position in mm"""
+        if amount > 0:  # move down
+            calc_run_time = amount * 10 / self.calibration['toolhead_speed_up']
+            self.robot(f'control1.z_axis.nudge({self.z_axis_down_setting}, run_time={calc_run_time})',
+                       verbose=verbose)
+        else:  # move up
+            calc_run_time = amount * 10 / self.calibration['toolhead_speed_down']
+            self.robot(f'control1.z_axis.nudge({self.z_axis_up_setting}, run_time={-calc_run_time})',
+                       verbose=verbose)
+        self.toolhead_z += amount
+
+    def zero_toolhead(self, verbose = False):
+        self.move_toolhead(-200, verbose=verbose)  # Rely on code to stop it
+        self.toolhead_z = 0
+
+    def toolhead_safe(self, verbose=False):
+        """Put to park and shutdown"""
+        self.robot('control1.th.park()', verbose=verbose)  # Make toolhead safe
+        time.sleep(2)  # TODO Poll status
+        self.robot('control1.th.shutdown()', verbose=verbose)  # Make toolhead safe
+
+    def raise_toolhead(self, verbose=False):
+        """Raise the toolhead and wait for it to be finished"""
+        self.zero_toolhead(verbose=verbose)
+        self.robot('control1.z_axis.shutdown()', verbose=verbose)
+
+    # ******************************************************************
     # ****Other code****
     def close(self):
         self.ser.close()
@@ -187,43 +237,6 @@ class ODRobot:
     def z_axis_state(self, verbose=False):
         result = self.robot('control1.z_axis.state()', verbose=verbose)[1]  # Find state
         return int(result)
-
-    def zero_toolhead(self, verbose = False):
-        self.move_toolhead(-200, verbose=verbose)  # Rely on code to stop it
-        self.toolhead_z = 0
-
-    def move_toolhead_to(self, position, verbose = False):
-        # Going to move in 1 second bursts and then measure position
-        if self.toolhead_z < 1:
-            self.zero_toolhead(verbose)
-        if position < 1:
-            self.zero_toolhead(verbose)
-        elif position == self.toolhead_z:
-            pass  # No move necessary
-        else:
-            new_position = position - self.toolhead_z
-            self.move_toolhead(new_position, verbose)
-
-    def move_toolhead(self, amount, verbose = False):
-        # Going to move in 1 second bursts and then measure position
-        if amount > 0:  # move down
-            self.robot(f'control1.z_axis.nudge({self.z_axis_down_setting}, run_time={amount})',
-                       verbose=verbose)
-        else:  # move up
-            self.robot(f'control1.z_axis.nudge({self.z_axis_up_setting}, run_time={-amount})',
-                       verbose=verbose)
-        self.toolhead_z += amount
-
-    def toolhead_safe(self, verbose=False):
-        """Put to park and shutdown"""
-        self.robot('control1.th.park()', verbose=verbose)  # Make toolhead safe
-        time.sleep(2)  # TODO Poll status
-        self.robot('control1.th.shutdown()', verbose=verbose)  # Make toolhead safe
-
-    def raise_toolhead(self, verbose=False):
-        """Raise the toolhead and wait for it to be finished"""
-        self.zero_toolhead(verbose=verbose)
-        self.robot('control1.z_axis.shutdown()', verbose=verbose)
 
     def make_safe(self, verbose=False):
         """Put the robot into a safe position to start or end a series of moves"""

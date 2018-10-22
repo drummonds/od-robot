@@ -50,7 +50,7 @@ class ZAxis:
             self.is_active = True
             self.pwm_c = self.pwm.channel(1, pin='G14', duty_cycle=start_dc)
 
-    def set_position(self, position): # Converts to 1 -2 ms pulses
+    def set_position(self, position): # Converts to 1 - 2 ms pulses every 20 ms
         # speed in %
         dc = (position / 100.0) * (1/20) + (1/20)
         self.activate(start_dc=dc)
