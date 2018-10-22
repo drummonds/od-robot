@@ -90,10 +90,10 @@ class ODRobot:
         self.calibration['bins'] = {
             # Name: position, drop offset, pickup offset, drop descend_time, pickup descent time
             #       0         1            2              3                  4
-            'in': [86, 0, 0, 20, 150],
-            'out': [14, 0, 0, 20, 150],
+            'in': [86, 0, 0, 10, 150],
+            'out': [14, 0, 0, 10, 150],
             'od': [51.0, -0.2, 0.5, 40, 70],
-            'waste': [0, 0, 0, 20, 0],  # no pickup
+            'waste': [0, 0, 0, 10, 0],  # no pickup
         }
         self.calibration['toolhead_speed_up'] = 10  # mm/sec initial guess
         self.calibration['toolhead_speed_down'] = 10  # mm/sec initial guess

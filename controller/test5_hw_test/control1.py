@@ -9,7 +9,7 @@ from z_axis import ZAxis
 pycom.heartbeat(False)
 
 pycom.rgbled(0xFF0000)  # Red
-print("OD Robot Controller 1.13 2018-10-18")
+print("OD Robot Controller 1.14 2018-10-22")
 
 class Heartbeat:
     def __init__(self):

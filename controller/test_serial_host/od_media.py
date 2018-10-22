@@ -46,3 +46,10 @@ class ODMedia:
     def disk_close(self):
         result = subprocess.run([self.path_root, "--load", "--drivename:0"], stdout=subprocess.PIPE)
         return result.stdout.decode('utf-8')
+
+    def burn_disk(self, file_name):
+        """ eg """
+        result = subprocess.run([self.path_root, "--burn-iso", "-device:0",
+                                 f'-file:{file_name}'], stdout=subprocess.PIPE)
+        print(result)
+        return result.stdout.decode('utf-8')

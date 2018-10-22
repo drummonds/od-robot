@@ -58,8 +58,13 @@ class ZAxis:
         return dc
 
     def shutdown(self):
-        # Ideally won't move servo
-        self.pwm_off = Pin('G14', mode=Pin.IN, pull=Pin.PULL_UP)
+        # Test output so as to not move servo when output is +ve
+        self.test_pin = Pin('G15', mode=Pin.IN, pull=Pin.PULL_DOWN)  # Set to ground
+        count = 200
+        while self.test_pin.value() and count > 0:
+            time.sleep_us(100)
+            count -= 1
+        self.pwm_off = Pin('G14', mode=Pin.IN, pull=Pin.PULL_DOWN)  # Set to ground
         self.is_active = False
 
     def nudge(self, at_position, run_time=20, override=False):
