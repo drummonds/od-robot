@@ -10,11 +10,11 @@ import subprocess
 class ODMedia:
     def __init__(self):
         self.path_root = r"C:\Program Files (x86)\CDBurnerXP\cdbxpcmd.exe"
-        # Safety check for known situation
+        #Safety check for known situation
         if self.number_of_drives == 1:
-            print('Found D drive all ok')
+           print('Found D drive all ok')
         else:
-            raise Exception(f"Didn't find 1 drive, num = {media.number_of_drives}")
+           raise Exception(f"Didn't find 1 drive, num = {media.number_of_drives}")
 
     def version(self):
         result = subprocess.run([self.path_root, "--version"], stdout=subprocess.PIPE)
@@ -32,8 +32,11 @@ class ODMedia:
         result = subprocess.run([self.path_root, "--list_drives"], stdout=subprocess.PIPE
                                 )
         lines = result.stdout.decode('utf-8').strip().split('\n')  # split into lines
-        trim_lines = [x.strip() for x in lines]
-        return [parse_media(x) for x in trim_lines]
+        try:
+            trim_lines = [x.strip() for x in lines]
+            return [parse_media(x) for x in trim_lines]
+        except:
+            raise Exception(f'list drives failed trying to parse: {lines}')
 
     @property
     def number_of_drives(self):

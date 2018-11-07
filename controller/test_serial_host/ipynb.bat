@@ -1,1 +1,1 @@
-jupyter notebook
+pipenv run jupyter notebook

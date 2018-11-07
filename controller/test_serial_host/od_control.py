@@ -85,8 +85,8 @@ class ODRobot:
 
     def default_calibration(self):
         self.calibration = {}
-        self.calibration['z_axis_down_setting'] = 51
-        self.calibration['z_axis_up_setting'] = 44
+        self.calibration['z_axis_down_setting'] = 53
+        self.calibration['z_axis_up_setting'] = 42
         self.calibration['bins'] = {
             # Name: position, drop offset, pickup offset, drop descend_time, pickup descent time
             #       0         1            2              3                  4
