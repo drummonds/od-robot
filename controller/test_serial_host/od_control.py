@@ -131,7 +131,7 @@ class ODRobot:
         if speed_offset is None:
             speed_offset = 5  # Changin default to 5 to give a wider range for center drift
         if time_up is None:
-            time_up = time_down * 3
+            time_up = time_down * 4
         down_speed = offset_middle + speed_offset
         up_speed = offset_middle - speed_offset
         md = self.move_down(speed_setting=down_speed, time_setting=time_down)
