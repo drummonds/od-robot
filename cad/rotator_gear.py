@@ -23,7 +23,7 @@ class RotatorStepperGear(TrapezoidalGear):
     """
     # Parameters
     gear_od = PositiveFloat(8, doc="Gear diameter")
-    gear_length = PositiveFloat(2, doc="Ger length")
+    gear_length = PositiveFloat(2, doc="Gear length")
 
     # default appearance
     _render = render_props(color=(200, 200, 200))  # dark grey
@@ -62,7 +62,7 @@ class RotatorStepperGear(TrapezoidalGear):
 
 # ------------------- Display Result -------------------
 # Could also export to another format
-if __name__ != 'TestEngineWholeModel':
+if __name__ == '__cq_freecad_module__':
     #m = ThreadedRod()
     # m = TrapezoidalGear()
     m = RotatorStepperGear(tooth_count=22, effective_radius=8.6, width=3.5, tooth_height=1.8)

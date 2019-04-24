@@ -247,11 +247,11 @@ class RotatorAssembly(cqparts.Assembly):
         return [
             Fixed(self.components['base'].mate_origin, CoordSystem()),
             Coincident(
-                self.components['front_bar'].mate_start,
+                self.components['front_bar'].mate_origin,
                 self.components['base'].mate_left
             ),
             Coincident(
-                self.components['back_bar'].mate_start,
+                self.components['back_bar'].mate_origin,
                 self.components['base'].mate_right
             ),
             Coincident(

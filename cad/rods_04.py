@@ -56,12 +56,15 @@ class ThreadedRod(H3Part):
         return r
 
     # Construct mating points
-    @property
-    def mate_start(self):
-        return Mate(self, CoordSystem(
-            origin=(0, 0, 0),
-            # xDir=(1, 0, 0), normal=(0, -1, 0),
-        ))
+    def mate_along(self, distance=0):
+        """Mating along rod"""
+        return Mate(
+            self,
+            CoordSystem(
+                origin=(distance, 0, 0),
+                # xDir=(1, 0, 0), normal=(0, -1, 0),
+            ),
+        )
 
 # ------------------- Side construction -------------------
 # This is some construction geometry to hold the two bars on for constructing
@@ -199,6 +202,13 @@ class Stepper_28BYJ_48(H3Part):
             xDir=(1, 0, 0), normal=(0, -1, 0),
         ))
 
+    @property
+    def mate_gear(self):
+        return Mate(self, CoordSystem(
+            origin=(26, 8.5, 0),
+            xDir=(0, 0, 1), normal=(-1, 0, 0),
+        ))
+
 # ------------------- Stepper holder -------------------
 # This is a model of a holder for the stepper motor
 
@@ -305,11 +315,11 @@ class RotatorAssembly(H3Assembly):
         return [
             Fixed(self.components['base'].mate_origin, CoordSystem()),
             Coincident(
-                self.components['front_bar'].mate_start,
+                self.components['front_bar'].mate_origin,
                 self.components['base'].mate_left
             ),
             Coincident(
-                self.components['back_bar'].mate_start,
+                self.components['back_bar'].mate_origin,
                 self.components['base'].mate_right
             ),
             Coincident(
@@ -324,7 +334,7 @@ class RotatorAssembly(H3Assembly):
 
         # ------------------- Display Result -------------------
 # Could also export to another format
-if __name__ != 'TestEngineWholeModel':
+if __name__ == '__cq_freecad_module__':
     # r = ThreadedRod()
     # r = SideConstruct()
     # r = RotatorAssembly()
