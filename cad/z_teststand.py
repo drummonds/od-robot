@@ -160,7 +160,7 @@ class TestBase(cqparts.Assembly):
         ]
 
     def make_alterations(self):
-        # cut out wheel wells
+        """cut out holes into base"""
         base = self.components["base"]
         self.components["mount1"].apply_cutout(base)
         self.components["mount2"].apply_cutout(base)
